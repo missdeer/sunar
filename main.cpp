@@ -1,34 +1,21 @@
 ﻿#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/process.hpp>
 #include <boost/program_options.hpp>
-#include <boost/property_tree/detail/rapidxml.hpp>
 #include <archive.h>
 #include <archive_entry.h>
 #include <iconv.h>
+
 
 #ifdef _WIN32
 #    include <windows.h>
 #endif
 
-namespace bp = boost::process;
 namespace po = boost::program_options;
-namespace fs = boost::filesystem;
-
-struct NormalizePathFunctor
-{
-    std::string operator()(const std::string &strPath)
-    {
-        fs::path path(strPath);
-        auto     normalizedPath = path.lexically_normal().string();
-        std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
-        return normalizedPath;
-    };
-};
+namespace fs = std::filesystem;
 
 int list_encoding(unsigned int count, const char *const *names, void *data)
 {
@@ -87,8 +74,7 @@ int main(int argc, char *argv[])
 
     if (varMap.count("list-encodings"))
     {
-        std::cout << "All supported encodings:"
-                  << std::endl;
+        std::cout << "All supported encodings:" << std::endl;
         iconvlist(&list_encoding, nullptr);
         return 0;
     }

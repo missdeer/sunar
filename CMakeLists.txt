@@ -11,7 +11,7 @@ set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 find_package(Iconv)
 find_package(LibArchive REQUIRED)
-find_package(Boost REQUIRED program_options filesystem)
+find_package(Boost REQUIRED program_options)
 
 if(Boost_FOUND)
      include_directories(${Boost_INCLUDE_DIRS})
@@ -62,6 +62,5 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Iconv::Iconv
     LibArchive::LibArchive
     Boost::program_options
-    Boost::filesystem
 )
 

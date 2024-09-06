@@ -43,7 +43,7 @@ jobs:
         uses: johnwason/vcpkg-action@v5
         id: vcpkg
         with:
-          pkgs: boost-process boost-filesystem boost-program-options boost-property-tree
+          pkgs: boost-algorithm boost-program-options libiconv libarchive
           triplet: ${{ env.vcpkg_triplet }}
           token: ${{ github.token }}
 
