@@ -1,0 +1,197 @@
+﻿name: Windows
+on: 
+  push:
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+  pull_request:
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+
+env:
+  WINDOWS_BASEKIT_URL: https://registrationcenter-download.intel.com/akdlm/IRC_NAS/e83a8e64-04fc-45df-85c6-c2208d03bdb5/w_BaseKit_p_2024.2.0.635_offline.exe
+  WINDOWS_HPCKIT_URL: https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d500705-397e-41b3-8b2b-2a3da1753fc2/w_HPCKit_p_2024.2.0.633_offline.exe
+  WINDOWS_CPP_COMPONENTS: intel.oneapi.win.cpp-dpcpp-common
+  WINDOWS_DPCPP_COMPONENTS: intel.oneapi.win.cpp-dpcpp-common
+  CACHE_NUMBER: 6
+  SAMPLES_TAG: 2024.2.0
+  AI_SAMPLES_TAG: 2024.1.0
+  COMPILER_VERSION: 2024.2.0
+  TBB_VERSION: 2021.13.0
+  VS_VER: vs2022
+  vc_arch: "x64"
+  output_dir: "x86_64"
+  clang_link: https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/LLVM-18.1.8-win64.exe
+  ninja_link: https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
+  vcpkg_triplet: x64-windows-static
+
+jobs:          
+  Windows-MSVC:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        toolset: [cl, clang-cl, icx]
+            
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: true
+
+      - name: vcpkg build
+        uses: johnwason/vcpkg-action@v5
+        id: vcpkg
+        with:
+          pkgs: boost-process boost-filesystem boost-program-options boost-property-tree
+          triplet: ${{ env.vcpkg_triplet }}
+          token: ${{ github.token }}
+
+      - name: Set up clang for Windows
+        if: matrix.toolset == 'clang-cl'
+        shell: cmd
+        run: |
+          mkdir llvm
+          cd llvm
+          curl.exe -o LLVM.exe -L ${{ env.clang_link }}
+          7z.exe x LLVM.exe
+          cd ..
+
+      - name: cache intel install
+        if: matrix.toolset == 'icx'
+        id: cache-install
+        uses: actions/cache@v2
+        with:
+          path: |
+              C:\Program Files (x86)\Intel\oneAPI\setvars-vcvarsall.bat
+              C:\Program Files (x86)\Intel\oneAPI\compiler
+          key: install-${{ env.CACHE_NUMBER }}-${{ env.WINDOWS_HPCKIT_URL }}-${{ env.WINDOWS_CPP_COMPONENTS }}-compiler-${{ hashFiles('**/scripts/cache_exclude_windows.sh') }}
+
+      - name: install intel
+        if: steps.cache-install.outputs.cache-hit != 'true' && matrix.toolset == 'icx'
+        run: |
+          git clone --depth=1 https://github.com/oneapi-src/oneapi-ci.git oneapi-ci
+          cd oneapi-ci
+          scripts/install_windows.bat ${{ env.WINDOWS_HPCKIT_URL }} ${{ env.WINDOWS_CPP_COMPONENTS }}
+
+      - name: restore registry on cache hit
+        if: steps.cache-install.outputs.cache-hit == 'true' && matrix.toolset == 'icx'
+        run:  |
+          git clone --depth=1 https://github.com/oneapi-src/oneapi-ci.git oneapi-ci
+          cd oneapi-ci
+          scripts/restore_registry.bat ${{ env.COMPILER_VERSION }} ${{ env.TBB_VERSION }}
+
+      - name: build-msvc
+        shell: cmd
+        run: |
+            call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" ${{ env.vc_arch }}
+            for /f "tokens=* usebackq" %%f in (`dir /b "C:\Program Files (x86)\Intel\oneAPI\compiler\" ^| findstr /V latest ^| sort`) do @set "LATEST_VERSION=%%f"
+            echo %LATEST_VERSION%
+            call "C:\Program Files (x86)\Intel\oneAPI\compiler\%LATEST_VERSION%\env\vars.bat"
+            set PATH="C:\Program Files (x86)\Intel\oneAPI\compiler\%LATEST_VERSION%\bin\";%CD%\llvm\bin;%CD%\jom;%PATH%
+            mkdir build
+            cd build
+            cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.toolset }} -DCMAKE_CXX_COMPILER=${{ matrix.toolset }} -G Ninja "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{ env.vcpkg_triplet }} -DVCPKG_MANIFEST_MODE=OFF ..
+            cmake --build . --parallel --verbose
+            mkdir bin
+            copy sunar.exe bin\
+
+      - name: upload executable artifact
+        uses: actions/upload-artifact@v1
+        with:
+          path: build\bin
+          name: sunar-${{ matrix.toolset }}
+
+      - name: Compress release
+        if: startsWith(github.event.ref, 'refs/tags/')
+        run: powershell Compress-Archive build\bin sunar-${{ matrix.toolset }}.zip
+        
+      - name: uploadRelease
+        if: startsWith(github.event.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GH_TOKEN }}
+          file: sunar-${{ matrix.toolset }}.zip
+          asset_name: sunar-${{ matrix.toolset }}.zip
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  Windows-MinGW:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - build_arch: mingw64-ucrt-gcc
+            mingw_arch: UCRT64 
+            mingw_prefix: mingw-w64-ucrt-x86_64
+            toolchains: gcc
+            c: gcc
+            cxx: g++
+          - build_arch: mingw64-gcc
+            mingw_arch: MINGW64 
+            mingw_prefix: mingw-w64-x86_64
+            toolchains: gcc
+            c: gcc
+            cxx: g++
+          - build_arch: mingw32-gcc
+            mingw_arch: MINGW32
+            mingw_prefix: mingw-w64-i686
+            toolchains: gcc
+            c: gcc
+            cxx: g++
+          - build_arch: clang64-clang
+            mingw_arch: CLANG64 
+            mingw_prefix: mingw-w64-clang-x86_64
+            toolchains: clang
+            c: clang
+            cxx: clang++
+          - build_arch: clang32-clang
+            mingw_arch: CLANG32
+            mingw_prefix: mingw-w64-clang-i686
+            toolchains: clang
+            c: clang
+            cxx: clang++
+          
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          msystem: ${{ matrix.mingw_arch }}
+          install: zip make git ${{ matrix.mingw_prefix }}-${{ matrix.toolchains }} ${{ matrix.mingw_prefix }}-make ${{ matrix.mingw_prefix }}-cmake ${{ matrix.mingw_prefix }}-openssl ${{ matrix.mingw_prefix }}-boost ${{ matrix.mingw_prefix }}-zstd
+          
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: true
+          
+      - name: Build 
+        shell: msys2 {0}
+        run: |
+          mkdir build
+          cd build
+          env PATH=$PATH:/${{ matrix.mingw_arch }}/bin cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.c }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} -G Ninja ..
+          env PATH=$PATH:/${{ matrix.mingw_arch }}/bin ninja
+          mkdir bin
+          cp sunar.exe bin/
+          env PATH=$PATH:/${{ matrix.mingw_arch }}/bin ldd sunar.exe | awk -v mingwarch="${{ matrix.mingw_arch }}" '{ arch = tolower(mingwarch); path = tolower($0);  if (path ~ "=> /" arch) print $(NF-1) }' | while read -r libpath; do cp -r $libpath bin/; done
+          cd ..
+
+      - name: upload executable artifact
+        uses: actions/upload-artifact@v1
+        with:
+          path: build\bin
+          name: sunar-${{ matrix.build_arch }}
+
+      - name: Compress release
+        if: startsWith(github.event.ref, 'refs/tags/')
+        run: powershell Compress-Archive build\bin sunar-${{ matrix.build_arch }}.zip
+        
+      - name: uploadRelease
+        if: startsWith(github.event.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GH_TOKEN }}
+          file: sunar-${{ matrix.build_arch }}.zip
+          asset_name: sunar-${{ matrix.build_arch }}.zip
+          tag: ${{ github.ref }}
+          overwrite: true

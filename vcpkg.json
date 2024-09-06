@@ -1,0 +1,10 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "dependencies": [
+    "boost-program-options",
+    "boost-filesystem",
+    "boost-process",
+    "boost-property-tree",
+    "libarchive"
+  ]
+}
