@@ -73,6 +73,12 @@ jobs:
           cd oneapi-ci
           scripts/restore_registry.bat ${{ env.COMPILER_VERSION }} ${{ env.TBB_VERSION }}
 
+      - name: vcpkg install
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          call bootstrap-vcpkg.bat
+
       - name: build-msvc
         shell: cmd
         run: |
@@ -83,7 +89,7 @@ jobs:
             set PATH="C:\Program Files (x86)\Intel\oneAPI\compiler\%LATEST_VERSION%\bin\";%CD%\llvm\bin;%CD%\jom;%PATH%
             mkdir build
             cd build
-            cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.toolset }} -DCMAKE_CXX_COMPILER=${{ matrix.toolset }} -G Ninja -DVCPKG_TARGET_TRIPLET=${{ env.vcpkg_triplet }} ..
+            cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${{ matrix.toolset }} -DCMAKE_CXX_COMPILER=${{ matrix.toolset }} -G Ninja "-DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}\vcpkg\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=${{ env.vcpkg_triplet }} ..
             cmake --build . --parallel --verbose
             mkdir bin
             copy sunar.exe bin\
