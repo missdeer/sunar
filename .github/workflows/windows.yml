@@ -74,6 +74,7 @@ jobs:
           scripts/restore_registry.bat ${{ env.COMPILER_VERSION }} ${{ env.TBB_VERSION }}
 
       - name: vcpkg install
+        shell: cmd
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
