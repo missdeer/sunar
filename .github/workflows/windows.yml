@@ -96,7 +96,7 @@ jobs:
             copy sunar.exe bin\
 
       - name: upload executable artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           path: build\bin
           name: sunar-${{ matrix.toolset }}
@@ -176,7 +176,7 @@ jobs:
           cd ..
 
       - name: upload executable artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           path: build\bin
           name: sunar-${{ matrix.build_arch }}
